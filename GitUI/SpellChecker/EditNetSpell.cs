@@ -41,11 +41,12 @@ namespace GitUI.SpellChecker
             InitializeComponent();
             Translate();
 
-            _customUnderlines = new SpellCheckEditControl(TextBox);
-
-            SpellCheckTimer.Enabled = false;
-
-            EnabledChanged += EditNetSpellEnabledChanged;
+            if(!Settings.IsMonoRuntime())
+            {
+                _customUnderlines = new SpellCheckEditControl(TextBox);
+                SpellCheckTimer.Enabled = false;
+                EnabledChanged += EditNetSpellEnabledChanged;
+            }
         }
 
         public override string Text
@@ -244,11 +245,15 @@ namespace GitUI.SpellChecker
 
         private void SpellingMisspelledWord(object sender, SpellingEventArgs e)
         {
-            _customUnderlines.Lines.Add(new TextPos(e.TextIndex, e.TextIndex + e.Word.Length));
+            if(_customUnderlines != null)
+                _customUnderlines.Lines.Add(new TextPos(e.TextIndex, e.TextIndex + e.Word.Length));
         }
 
         public void CheckSpelling()
         {
+            if(_customUnderlines == null)
+                return;
+
             _customUnderlines.IllFormedLines.Clear();
             _customUnderlines.Lines.Clear();
 
@@ -541,7 +546,7 @@ namespace GitUI.SpellChecker
 
         private void SpellCheckTimerTick(object sender, EventArgs e)
         {
-            if (!_customUnderlines.IsImeStartingComposition)
+            if (_customUnderlines != null && !_customUnderlines.IsImeStartingComposition)
             {
                 CheckSpelling();
 
@@ -552,6 +557,9 @@ namespace GitUI.SpellChecker
 
         private void TextBoxTextChanged(object sender, EventArgs e)
         {
+            if(_customUnderlines == null)
+                return;
+
             _customUnderlines.Lines.Clear();
             _customUnderlines.IllFormedLines.Clear();
 
