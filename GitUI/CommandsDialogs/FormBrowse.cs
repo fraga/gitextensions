@@ -6,6 +6,7 @@ using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Reflection;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -16,10 +17,11 @@ using GitUI.CommandsDialogs.BrowseDialog;
 using GitUI.CommandsDialogs.BrowseDialog.DashboardControl;
 using GitUI.Hotkey;
 using GitUI.Plugin;
+using GitUI.Properties;
 using GitUI.Script;
 using GitUIPluginInterfaces;
 using ResourceManager.Translation;
-using System.Reflection;
+using Settings = GitCommands.Settings;
 #if !__MonoCS__
 using Microsoft.WindowsAPICodePack.Taskbar;
 #endif
@@ -430,6 +432,7 @@ namespace GitUI.CommandsDialogs
 
             CheckForMergeConflicts();
             UpdateStashCount();
+            UpdateSubmodulesList();
             // load custom user menu
             LoadUserMenu();
 
@@ -2691,6 +2694,7 @@ namespace GitUI.CommandsDialogs
 
         private void RemoveSubmoduleButtons()
         {
+            _submodulesStatusImagesCTS.Cancel();
             foreach (var item in toolStripButtonLevelUp.DropDownItems)
             {
                 var toolStripButton = item as ToolStripMenuItem;
@@ -2699,6 +2703,7 @@ namespace GitUI.CommandsDialogs
             }
             toolStripButtonLevelUp.DropDownItems.Clear();
         }
+
         private string GetModuleBranch(string path)
         {
             string branch = GitModule.GetSelectedBranchFast(path);
@@ -2717,11 +2722,52 @@ namespace GitUI.CommandsDialogs
             return spmenu;
         }
 
+        DateTime _previousUpdateTime;
+
         private void LoadSubmodulesIntoDropDownMenu()
         {
-            Cursor.Current = Cursors.WaitCursor;
+            TimeSpan elapsed = DateTime.Now - _previousUpdateTime;
+            if (elapsed.TotalSeconds > 15)
+                UpdateSubmodulesList();
+        }
 
+        private CancellationTokenSource _submodulesStatusImagesCTS = new CancellationTokenSource();
+            
+        private static Image GetItemImage(GitSubmoduleStatus gitSubmoduleStatus)
+        {
+            if (gitSubmoduleStatus == null)
+                return Resources.IconFolderSubmodule;
+            if (gitSubmoduleStatus.Status == SubmoduleStatus.FastForward || gitSubmoduleStatus.Status == SubmoduleStatus.NewerTime)
+                return gitSubmoduleStatus.IsDirty ? Resources.IconSubmoduleRevisionUpDirty : Resources.IconSubmoduleRevisionUp;
+            if (gitSubmoduleStatus.Status == SubmoduleStatus.Rewind || gitSubmoduleStatus.Status == SubmoduleStatus.OlderTime)
+                return gitSubmoduleStatus.IsDirty ? Resources.IconSubmoduleRevisionDownDirty : Resources.IconSubmoduleRevisionDown;
+            return !gitSubmoduleStatus.IsDirty ? Resources.Modified : Resources.IconSubmoduleDirty;
+        }
+
+        private Task GetSubmoduleStatusImageAsync(ToolStripMenuItem mi, GitModule module, string submodulePath)
+        {
+            var token = _submodulesStatusImagesCTS.Token;
+            return Task.Factory.StartNew(() =>
+            {
+                var submoduleStatus = GitCommandHelpers.GetCurrentSubmoduleChanges(module, submodulePath);
+                if (submoduleStatus != null && submoduleStatus.Commit != submoduleStatus.OldCommit)
+                {
+                    var submodule = submoduleStatus.GetSubmodule(module);
+                    submoduleStatus.CheckSubmoduleStatus(submodule);
+                }
+                return submoduleStatus;
+            }, token)
+            .ContinueWith((task) => mi.Image = GetItemImage(task.Result),
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnRanToCompletion,
+                TaskScheduler.FromCurrentSynchronizationContext());
+        }
+
+        private void UpdateSubmodulesList()
+        {
             RemoveSubmoduleButtons();
+            _previousUpdateTime = DateTime.Now;
+            _submodulesStatusImagesCTS = new CancellationTokenSource();
 
             foreach (var submodule in Module.GetSubmodulesLocalPathes().OrderBy(submoduleName => submoduleName))
             {
@@ -2730,7 +2776,9 @@ namespace GitUI.CommandsDialogs
                 if (Settings.DashboardShowCurrentBranch && !GitModule.IsBareRepository(path))
                     name = name + " " + GetModuleBranch(path);
 
-                AddSubmoduleToMenu(name, path);
+                var smi = AddSubmoduleToMenu(name, path);
+                var submoduleName = submodule;
+                GetSubmoduleStatusImageAsync(smi, Module, submoduleName);
             }
 
             bool containSubmodules = toolStripButtonLevelUp.DropDownItems.Count != 0;
@@ -2738,13 +2786,12 @@ namespace GitUI.CommandsDialogs
                 toolStripButtonLevelUp.DropDownItems.Add(_noSubmodulesPresent.Text);
 
             string currentSubmoduleName = null;
-            GitModule supersuperproject = null;
             if (Module.SuperprojectModule != null)
             {
                 var superprojectSeparator = new ToolStripSeparator();
                 toolStripButtonLevelUp.DropDownItems.Add(superprojectSeparator);
 
-                supersuperproject = Module.FindTopProjectModule();
+                GitModule supersuperproject = Module.FindTopProjectModule();
                 if (Module.SuperprojectModule.WorkingDir != supersuperproject.WorkingDir)
                 {
                     var name = "Top project: " + Path.GetFileName(Path.GetDirectoryName(supersuperproject.WorkingDir));
@@ -2752,14 +2799,17 @@ namespace GitUI.CommandsDialogs
                     if (Settings.DashboardShowCurrentBranch && !GitModule.IsBareRepository(path))
                         name = name + " " + GetModuleBranch(path);
 
-                    AddSubmoduleToMenu(name, supersuperproject);
+                    var smi = AddSubmoduleToMenu(name, supersuperproject);
+                    var submoduleName = Path.GetFileName(Path.GetDirectoryName(supersuperproject.WorkingDir));
+                    GetSubmoduleStatusImageAsync(smi, supersuperproject, submoduleName);
                 }
 
                 {
                     var name = "Superproject: ";
+                    string localpath = "";
                     if (Module.SuperprojectModule.WorkingDir != supersuperproject.WorkingDir)
                     {
-                        string localpath = Module.SuperprojectModule.WorkingDir.Substring(supersuperproject.WorkingDir.Length);
+                        localpath = Module.SuperprojectModule.WorkingDir.Substring(supersuperproject.WorkingDir.Length);
                         localpath = localpath.Replace(Settings.PathSeparator, Settings.PathSeparatorWrong).TrimEnd(
                                 Settings.PathSeparatorWrong);
                         name = name + localpath;
@@ -2770,7 +2820,8 @@ namespace GitUI.CommandsDialogs
                     if (Settings.DashboardShowCurrentBranch && !GitModule.IsBareRepository(path))
                         name = name + " " + GetModuleBranch(path);
 
-                    AddSubmoduleToMenu(name, Module.SuperprojectModule);
+                    var smi = AddSubmoduleToMenu(name, Module.SuperprojectModule);
+                    GetSubmoduleStatusImageAsync(smi, Module.SuperprojectModule, localpath);
                 }
 
                 var submodules = supersuperproject.GetSubmodulesLocalPathes().OrderBy(submoduleName => submoduleName);
@@ -2797,6 +2848,8 @@ namespace GitUI.CommandsDialogs
                             currentSubmoduleName = Module.GetCurrentSubmoduleLocalPath();
                             submenu.Font = new Font(submenu.Font, FontStyle.Bold);
                         }
+                        var submoduleName = submodule;
+                        GetSubmoduleStatusImageAsync(submenu, Module, submoduleName);
                     }
                 }
             }
@@ -2815,8 +2868,6 @@ namespace GitUI.CommandsDialogs
                 usmi.Click += UpdateSubmoduleToolStripMenuItemClick;
                 toolStripButtonLevelUp.DropDownItems.Add(usmi);
             }
-
-            Cursor.Current = Cursors.Default;
         }
 
         private void toolStripButtonLevelUp_ButtonClick(object sender, EventArgs e)
