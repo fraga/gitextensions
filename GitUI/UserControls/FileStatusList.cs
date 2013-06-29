@@ -13,6 +13,7 @@ using GitCommands;
 using GitUI.Properties;
 using GitUI.UserControls;
 using ResourceManager.Translation;
+using GitCommands.Utils;
 
 namespace GitUI
 {
@@ -32,10 +33,10 @@ namespace GitUI
             InitializeComponent(); Translate();
             SelectFirstItemOnSetItems = true;
             _noDiffFilesChangesDefaultText = NoFiles.Text;
-#if !__MonoCS__ // TODO Drag'n'Drop doesn't work on Mono/Linux
-            FileStatusListView.MouseMove += FileStatusListView_MouseMove;
-            FileStatusListView.MouseDown += FileStatusListView_MouseDown;
-#endif
+
+            if(!EnvUtils.IsMonoRuntime())
+                RegisterMouseMoveDownEvents();
+
             if (_images == null)
             {
                 _images = new ImageList();
@@ -77,6 +78,12 @@ namespace GitUI
             {
                 return FileStatusListView.Focused;
             }
+        }
+
+        public void RegisterMouseMoveDownEvents()
+        {
+            FileStatusListView.MouseMove += FileStatusListView_MouseMove;
+            FileStatusListView.MouseDown += FileStatusListView_MouseDown;
         }
 
         public new void Focus()
@@ -145,7 +152,6 @@ namespace GitUI
             }
         }
 
-#if !__MonoCS__ // TODO Drag'n'Drop doesnt work on Mono/Linux
         void FileStatusListView_MouseDown(object sender, MouseEventArgs e)
         {
             //SELECT
@@ -182,7 +188,6 @@ namespace GitUI
                     dragBoxFromMouseDown = Rectangle.Empty;
             }
         }
-#endif
 
         public override ContextMenuStrip ContextMenuStrip
         {
@@ -208,7 +213,6 @@ namespace GitUI
             }
         }
 
-#if !__MonoCS__ // TODO Drag'n'Drop doesnt work on Mono/Linux
         private Rectangle dragBoxFromMouseDown;
 
         void FileStatusListView_MouseMove(object sender, MouseEventArgs e)
@@ -268,7 +272,6 @@ namespace GitUI
                 }
             }
         }
-#endif
 
         [Browsable(false)]
         public IEnumerable<GitItemStatus> AllItems
