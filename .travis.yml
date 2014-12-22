@@ -8,7 +8,7 @@ before_install:
   - sudo apt-get update -qq
 
 install:
-  - ./Build/build.mono.sh
+  - sudo apt-get install mono-complete
   - mozroots --import --sync --quiet 
 
 script:
