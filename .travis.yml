@@ -6,10 +6,10 @@ before_install:
   - sudo bash -c "echo deb http://badgerports.org precise main >> /etc/apt/sources.list"
   - sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 0E1FAD0C
   - sudo apt-get update -qq
-  - sudo mono --version
 
 install:
-  - mozroots --import --sync --quiet
+  - ./Build/build.mono.sh
+  - mozroots --import --sync --quiet 
 
 script:
   - xbuild ./GitExtensionsMono.sln
