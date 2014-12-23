@@ -11,7 +11,7 @@ install:
   - sudo apt-get install mono-complete
   - mozroots --import --sync --quiet
   - cp .nuget/NuGet.* Externals/NBug/.nuget/
+  - mono --runtime=v4.0.30319 .nuget/NuGet.exe restore Externals/NBug/NBug.sln
   - mono --runtime=v4.0.30319 .nuget/NuGet.exe restore ./GitExtensionsMono.sln
-  - mono --runtime=v4.0.30319 Externals/NBug/NBug.sln
 script:
   - xbuild ./GitExtensionsMono.sln
