@@ -14,4 +14,4 @@ install:
   - mono --runtime=v4.0.30319 .nuget/NuGet.exe restore Externals/NBug/NBug.sln
   - mono --runtime=v4.0.30319 .nuget/NuGet.exe restore ./GitExtensionsMono.sln
 script:
-  - xbuild ./GitExtensionsMono.sln
+  - xbuild /p:RestorePackages="false" ./GitExtensionsMono.sln
