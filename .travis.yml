@@ -9,7 +9,8 @@ before_install:
 
 install:
   - sudo apt-get install mono-complete
-  - mozroots --import --sync --quiet 
+  - mozroots --import --sync --quiet
+  - cp .nuget/NuGet.* Externals/NBug/.nuget/
 
 script:
   - xbuild ./GitExtensionsMono.sln
